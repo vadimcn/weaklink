@@ -26,15 +26,16 @@ jobs:
           cross: true
 
         - os: MacOS
+          target: x86_64-apple-darwin
           image: macOS-latest
 
         - os: MacOS
           image: macOS-latest
           target: aarch64-apple-darwin
-          test_cargo_args: --no-run
 
         - os: Windows
           image: windows-latest
+          target: x86_64-pc-windows-msvc
 
         - os: Windows
           image: windows-latest
