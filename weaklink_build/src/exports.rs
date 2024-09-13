@@ -96,9 +96,7 @@ pub fn dylib_exports(path: &Path) -> Result<Vec<Export>, Error> {
             }
             Ok(result)
         }
-        Object::Archive(_) => Err(format!("Unsupported object type: Archive").into()),
-        Object::COFF(_) => Err(format!("Unsupported object type: COFF").into()),
-        Object::Unknown(magic) => Err(format!("Unknown object type: {:x}", magic).into()),
+        _ => Err(format!("Unsupported object type: {object:?}").into()),
     }
 }
 

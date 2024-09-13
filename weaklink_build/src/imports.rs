@@ -81,8 +81,8 @@ fn get_unique_imports(buffer: &[u8], imports: &mut HashSet<String>) -> Result<()
             }
         }
         Object::COFF(coff) => {
-            if let Ok(strtab) = coff.header.strings(buffer) {
-                if let Ok(symtab) = coff.header.symbols(buffer) {
+            if let Ok(Some(strtab)) = coff.header.strings(buffer) {
+                if let Ok(Some(symtab)) = coff.header.symbols(buffer) {
                     for (index, _, sym) in symtab.iter() {
                         if sym.section_number == pe::symbol::IMAGE_SYM_UNDEFINED {
                             let sym_name = sym.name(&strtab)?;
@@ -93,7 +93,6 @@ fn get_unique_imports(buffer: &[u8], imports: &mut HashSet<String>) -> Result<()
             }
             Ok(())
         }
-        Object::PE(_) => Err(format!("Unsupported object type: PE").into()),
-        Object::Unknown(magic) => Err(format!("Unknown object type: {:x}", magic).into()),
+        _ => Err(format!("Unsupported object type: {object:?}").into()),
     }
 }
