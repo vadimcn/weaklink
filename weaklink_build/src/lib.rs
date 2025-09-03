@@ -24,18 +24,22 @@ use crate::stub_gen::TargetOs;
 
 type Error = Box<dyn std::error::Error>;
 
+/// Describes one symbol stub to generate.
+///
+/// A stub exports [`SymbolStub::export_name`] to the consuming program and resolves [`SymbolStub::import_name`] in the
+/// target dynamic library.
 #[derive(Clone, Default, Debug)]
 pub struct SymbolStub {
-    /// Symbol name exported by the wrapped library.
+    /// The symbol name to resolve in the target dynamic library.
     pub import_name: String,
-    /// Symbol name that will be exported from the stub library.
+    /// The symbol name exported by the generated stub.
     pub export_name: String,
-    /// If true, generate a function that returns symbol address when called.
+    /// Whether to generate an accessor that returns the resolved address instead of a function jump stub.
     pub is_data: bool,
 }
 
 impl SymbolStub {
-    /// Create a stub for exported code symbol `name`.
+    /// Creates a function stub that exports and resolves `name`.
     pub fn new(name: &str) -> SymbolStub {
         SymbolStub {
             import_name: name.to_string(),
@@ -44,8 +48,9 @@ impl SymbolStub {
         }
     }
 
-    /// Create a stub for for exported data symbol `exp_name`.
-    /// The client-side accessor function will be named `imp_name`.
+    /// Creates an accessor stub named `exp_name` for the data symbol `imp_name`.
+    ///
+    /// Calling the generated accessor returns the address of `imp_name` in the target dynamic library.
     pub fn new_data(exp_name: &str, imp_name: &str) -> SymbolStub {
         SymbolStub {
             export_name: exp_name.to_string(),
@@ -55,16 +60,19 @@ impl SymbolStub {
     }
 }
 
+/// Configures source generation for one weakly linked dynamic library.
 pub struct Config {
-    /// Name of the static variable that exposes management API in the generated stubs crate.
+    /// Name of the generated [`weaklink::Library`] static.
     pub name: String,
-    /// Target triple to generate code for.
+    /// Rust target triple for which stubs are generated.
     pub target: String,
-    /// Dylib names to try when loading implicitly.
+    /// Candidate dynamic-library names tried by [`weaklink::Library::load`], in order.
     pub dylib_names: Vec<String>,
-    /// Whether to perform symbol name adjustment. 
-    /// 
-    /// Currently this handles a quirk of MacOSX linker, which automatically adds leading underscores to all exports.
+    /// Whether to adjust generated symbol names for platform ABI conventions.
+    ///
+    /// Currently this includes adapting Mach-O symbol names for Apple's
+    /// [`dlsym`](https://developer.apple.com/library/archive/documentation/System/Conceptual/ManPages_iPhoneOS/man3/dlsym.3.html#//apple_ref/doc/man/3/dlsym),
+    /// which expects names without the ABI's leading underscore.
     pub adjust_symbol_names: bool,
 
     // The list of symbol stubs created so far.
@@ -76,11 +84,12 @@ pub struct Config {
 }
 
 impl Config {
-    /// Create a new build configuration with the following defaults
+    /// Creates a build configuration with the following defaults:
+    ///
     /// - [`name`](`Config::name`): The `name` parameter.
-    /// - [`target`](`Config::target`): The current cargo build target.
-    /// - [`dylib_names`](`Config::dylib_names`): An empty vector.
-    /// - [`adjust_symbol_names`](`Config::adjust_symbol_names`): `true`
+    /// - [`target`](`Config::target`): Cargo's `TARGET`, or the host target outside a Cargo build script.
+    /// - [`dylib_names`](`Config::dylib_names`): An empty list.
+    /// - [`adjust_symbol_names`](`Config::adjust_symbol_names`): `true`.
     pub fn new(name: &str) -> Self {
         let target = match env::var("TARGET") {
             Ok(target) => target,
@@ -98,8 +107,12 @@ impl Config {
         }
     }
 
-    /// Add a group of symbols that may be resolved all at once using the specified group name.  
-    /// A symbol may appear in more than one group.
+    /// Adds a named group of symbols that will be resolved together at runtime.
+    ///
+    /// A symbol may belong to more than one group. If it does, its [`SymbolStub::import_name`] and
+    /// [`SymbolStub::is_data`] values must be identical in every group.
+    ///
+    /// Returns an error if `group_name` already exists or a symbol conflicts with an earlier definition.
     pub fn add_symbol_group<'a>(
         &mut self,
         group_name: &str,
@@ -143,7 +156,13 @@ impl Config {
         Ok(())
     }
 
-    /// Generate source of the stub crate.
+    /// Writes the generated Rust source and assembly stubs to `text`.
+    ///
+    /// The output is intended to be included in the consuming crate with `include!`.
+    ///
+    /// # Panics
+    ///
+    /// Panics if [`Config::target`] specifies an unsupported operating system or architecture.
     pub fn generate_source(&self, text: &mut dyn Write) {
         // Adjust names for MacOS ABI
         let mut stubs = Cow::from(&self.stubs);

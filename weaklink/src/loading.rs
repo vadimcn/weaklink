@@ -1,19 +1,19 @@
-//! Provides a platform-agnostic interface for loading dynamic libraries and finding symbols within them.
+//! Cross-platform functions for loading dynamic libraries and resolving symbols.
 
 #[cfg(any(unix))]
 pub use unix::{find_symbol, load_library};
 #[cfg(any(windows))]
 pub use windows::{find_symbol, load_library};
 
-/// Represents a handle to a dynamic library.
+/// An opaque handle to a loaded dynamic library.
 #[repr(transparent)]
 #[derive(Copy, Clone)]
 pub struct DylibHandle(pub usize);
 
-/// Represents an address in memory.
+/// The address of a resolved symbol.
 pub type Address = usize;
 
-/// Unix-spcific loading functions.
+/// Unix-specific dynamic-library loading functions and flags.
 #[cfg(any(unix, doc))]
 pub mod unix {
     use super::{Address, DylibHandle};
@@ -44,7 +44,7 @@ pub mod unix {
         fn dlerror() -> *const c_char;
     }
 
-    /// Loads a dynamic library with the specified flags.
+    /// Loads the dynamic library at `path` using the supplied `dlopen` flags.
     pub fn load_library_with_flags(path: &Path, flags: c_int) -> Result<DylibHandle, Error> {
         let path_buf = CString::new(path.as_os_str().as_bytes()).unwrap();
         unsafe {
@@ -57,12 +57,12 @@ pub mod unix {
         }
     }
 
-    /// Loads a dynamic library with lazy binding and global visibility.
+    /// Loads the dynamic library at `path` with lazy binding and global symbol visibility.
     pub fn load_library(path: &Path) -> Result<DylibHandle, Error> {
         load_library_with_flags(path, RTLD_LAZY | RTLD_GLOBAL)
     }
 
-    /// Finds a symbol in a dynamic library.
+    /// Resolves `name` in the dynamic library identified by `handle`.
     pub fn find_symbol(handle: DylibHandle, name: &CStr) -> Result<Address, Error> {
         unsafe {
             let ptr = dlsym(handle.0 as *const c_void, name.as_ptr());
@@ -75,7 +75,7 @@ pub mod unix {
     }
 }
 
-/// Windows-specific loading functions.
+/// Windows-specific dynamic-library loading functions and flags.
 #[cfg(any(windows, doc))]
 pub mod windows {
     use super::{Address, DylibHandle};
@@ -103,6 +103,7 @@ pub mod windows {
         fn GetLastError() -> u32;
     }
 
+    /// Loads the dynamic library at `path` using the supplied `LoadLibraryExW` flags.
     pub fn load_library_ex(path: &Path, flags: u32) -> Result<DylibHandle, Error> {
         let mut path_buf = path
             .as_os_str()
@@ -120,10 +121,12 @@ pub mod windows {
         }
     }
 
+    /// Loads the dynamic library at `path` with an altered search path.
     pub fn load_library(path: &Path) -> Result<DylibHandle, Error> {
         load_library_ex(path, LOAD_WITH_ALTERED_SEARCH_PATH)
     }
 
+    /// Resolves `name` in the dynamic library identified by `handle`.
     pub fn find_symbol(handle: DylibHandle, name: &CStr) -> Result<Address, Error> {
         unsafe {
             let ptr = GetProcAddress(handle.0 as *const c_void, name.as_ptr());

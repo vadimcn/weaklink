@@ -1,42 +1,46 @@
+# Weaklink
 
-This crate implements weak dynamic linking across platforms (Linux, macOS, and Windows), making it easier to work with
-dynamic libraries that may not be installed or may vary in version.
+Weaklink provides weak dynamic linking for Linux, macOS, and Windows. It allows a program to use a dynamic library
+without requiring that library to be installed at startup, and it can accommodate libraries whose exported symbols vary
+between versions.
 
 # When is this useful?
 
-This crate is useful when your program depends on a dynamic library that may not be installed on the target system, or
-when different versions of the library are in use. Instead of manually managing each API call with `dlopen`/`dlsym` (or
-platform-specific equivalents), Weaklink automatically handles loading and symbol resolution at runtime, simplifying the
-process.
+Use Weaklink when your program has an optional dependency on a dynamic library or must support multiple versions of that
+library. Weaklink handles loading and symbol resolution at runtime, so you do not need to resolve every symbol manually
+with `dlopen` and `dlsym` or their platform-specific equivalents.
 
-This is especially for calling into plugins that export mangled symbols (like C++ or Rust), since finding out the
-mangled symbol name for a function may be non-trivial.
+This allows the host application to degrade gracefully when the library is unavailable or does not export every expected
+function symbol, for example by disabling only the features that depend on the missing library or symbols.
 
 # How does it work?
 
-Weaklink generates a Rust crate with function stubs that mirror the public APIs of the original dynamic library. These
-stubs are compiled into a static library and linked to your main program. When a stubbed API is called, Weaklink
-dynamically loads the original library, resolves the symbol, and jumps to the appropriate function.
+At build time, Weaklink generates a Rust crate containing function stubs for selected symbols in the target dynamic
+library. The generated crate is compiled as a static library and linked into your program. When your program calls a stub,
+Weaklink loads the target library at runtime, resolves the corresponding symbol, and transfers control to the resolved
+function.
 
-Conceptually, this is similar to the ELF
-[Procedure Linkage Table](https://www.google.com/search?q=Procedure+Linkage+Table) on Linux or
+This mechanism is similar to the ELF
+[Procedure Linkage Table](https://en.wikipedia.org/wiki/Position-independent_code#Dynamic_shared_objects) on Linux and
 [Delay-loaded DLLs](https://learn.microsoft.com/en-us/cpp/build/reference/linker-support-for-delay-loaded-dlls) on
 Windows.
 
-The generated crate also provides a management API that allows:
-- Overriding the dynamic library's file name.
-- Supplying a dynamic library handle directly.
-- Controlling the loading of pre-defined API groups, which are organized at build time. The management API enables you
-  to check whether all APIs in a group were successfully resolved at runtime, allowing you to avoid calling APIs that
-  are unavailable in the installed version of the library.
+The generated crate also provides a management API for:
+- overriding the dynamic library's file name,
+- supplying an existing dynamic library handle,
+- controlling resolution of symbol groups defined at build time,
+- checking whether every symbol in a group was resolved successfully before calling functions that may be unavailable in
+  the installed library.
 
 # Limitations
-Weaklink supports transparent redirection only for code symbols (functions); handling data symbols would require
-explicit linker support. However, you can still work with data symbols by manually wrapping them, though this requires
-changes in your code. Specifically, you'll need to call a function that returns the address of the data rather than
-accessing the data directly.
 
-# Supported OS and architectures:
-- Linux: x86_64, arm, aarch64
-- MacOS: x86_64, arm64
-- Windows: x86_64
+Weaklink supports function symbols only. It cannot transparently link data symbols, such as global variables, because
+doing so requires explicit linker support.
+
+To use a data symbol, expose a function that returns the symbol's address and dereference that address in your code.
+
+# Supported platforms:
+
+* Linux: x86_64, arm, aarch64
+* MacOS: x86_64, arm64
+* Windows: x86_64

@@ -7,12 +7,16 @@ use goblin::*;
 
 use crate::{Error, SymbolStub};
 
+/// A symbol imported by an object file.
 #[derive(Clone, Debug)]
 pub struct Import {
+    /// Name of the imported symbol.
     pub name: String,
 }
 
-/// Returns the list of symbols imported by a static library.
+/// Reads the unique symbols imported by object files in the static library at `path`.
+///
+/// Nested archives are traversed recursively. The order of the returned symbols is unspecified.
 pub fn archive_imports(path: &Path) -> Result<Vec<Import>, Error> {
     let mut fd = File::open(path)?;
     let mut buffer = Vec::new();

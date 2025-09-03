@@ -7,20 +7,23 @@ use goblin::*;
 
 use crate::{Error, SymbolStub};
 
+/// A symbol exported by a dynamic library.
 #[derive(Clone, Debug)]
 pub struct Export {
     /// Name of the exported symbol.
     ///
-    /// Name-less symbols (including ordinal exports on Windows) will be skipped.
+    /// Nameless symbols, including ordinal-only exports on Windows, are omitted by [`dylib_exports`].
     pub name: String,
 
-    /// Image section name, or `None` if the export could not be mapped to any image section (unusual).
+    /// Name of the image section containing the symbol, if it could be determined.
     ///
-    /// On MacOS this will contain a combination of segment and section names, e.g. "__TEXT.__text".
+    /// On macOS, this combines the segment and section names, for example `__TEXT.__text`.
     pub section: Option<String>,
 }
 
-/// Returns the list of symbols exported from a dynamic library.
+/// Reads the symbols exported by the ELF, Mach-O, or PE dynamic library at `path`.
+///
+/// For a universal Mach-O binary, only the first architecture is inspected.
 pub fn dylib_exports(path: &Path) -> Result<Vec<Export>, Error> {
     let mut fd = File::open(path)?;
     let mut buffer = Vec::new();

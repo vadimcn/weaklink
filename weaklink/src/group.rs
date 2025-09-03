@@ -4,7 +4,7 @@ use std::{
     sync::atomic::{AtomicU8, Ordering},
 };
 
-/// Represents a group of symbols defined at build time.
+/// A build-time-defined set of symbols that are resolved together.
 #[repr(C)]
 pub struct Group {
     name: &'static str,
@@ -31,12 +31,11 @@ impl Group {
         }
     }
 
-    /// Resolves the group's symbols if they haven't been resolved yet.
-    /// The result is cached, so repeated calls will not trigger re-resolution.
+    /// Resolves every symbol in the group.
     ///
-    /// On success, this function returns a resolution state token. In [checked mode](index.html#checked-mode),
-    /// the group’s resolution state is considered "resolved" only for the lifetime of the token. Once the token
-    /// is dropped, the group's state reverts to "unknown" from the perspective of the calling thread.
+    /// On success, returns a [`GroupResolved`] token. In [checked mode](index.html#checked-mode), the group's symbols
+    /// remain callable while at least one token covering them is alive. Without checked mode, successful resolution is
+    /// cached permanently. Failed resolution is cached in both modes.
     pub fn resolve(&self) -> Result<GroupResolved, Error> {
         let is_resolved = match self.status.load(Ordering::Acquire) {
             GROUP_STATUS_UNKNOWN => {
@@ -64,21 +63,26 @@ impl Group {
         }
     }
 
-    /// Marks the group as having failed symbol resolution.
+    /// Forces the group into the failed state without attempting symbol resolution.
     ///
-    /// The purpose of this function is to simulate a failed group resolution in [checked mode](index.html#checked-mode).
+    /// This is intended for testing fallback paths in [checked mode](index.html#checked-mode). Future calls to
+    /// [`Group::resolve`] return an error.
     pub fn mark_failed(&self) {
         self.status.store(GROUP_STATUS_FAILED, Ordering::Release);
     }
 }
 
-/// Represents resolved state of a [Group]. See [Group::resolve()]
+/// A token proving that a [`Group`] was resolved successfully.
+///
+/// In [checked mode](index.html#checked-mode), keep this token alive while calling functions whose symbols belong to the
+/// group. Dropping the last token that covers a symbol clears its stub pointer.
 pub struct GroupResolved<'a>(&'a Group);
 
 impl<'a> GroupResolved<'a> {
-    /// Make group resolution permanent.
+    /// Keeps the group's symbols resolved permanently.
     ///
-    /// Intended for permanently resolving one or more non-optional API groups.
+    /// This consumes the token without releasing its resolution assertion. It is intended for required symbol groups
+    /// that remain in use for the lifetime of the process.
     pub fn mark_permanent(self) {
         mem::forget(self);
     }
