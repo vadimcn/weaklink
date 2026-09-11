@@ -14,6 +14,7 @@ jobs:
         include: 
         - os: Linux
           image: ubuntu-latest
+          target: x86_64-unknown-linux-gnu
 
         - os: Linux
           image: ubuntu-latest
@@ -26,8 +27,8 @@ jobs:
           cross: true
 
         - os: MacOS
-          target: x86_64-apple-darwin
           image: macOS-latest
+          target: x86_64-apple-darwin
 
         - os: MacOS
           image: macOS-latest
@@ -41,7 +42,11 @@ jobs:
           image: windows-latest
           target: x86_64-pc-windows-gnu
 
-    name: ${{ matrix.os }} ${{ matrix.target }}
+        - os: Windows
+          image: windows-11-arm
+          target: aarch64-pc-windows-msvc
+
+    name: ${{ matrix.os }} (${{ matrix.target }})
     runs-on: ${{ matrix.image }}
 
     steps:
